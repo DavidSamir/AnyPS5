@@ -5,6 +5,7 @@ import sys
 import tempfile
 
 from test_guest_intel_trampolines import PLAIN_SITE, elf_loads, guest_fixture, main_fixture
+from test_macos_output import MachO
 from test_windows_import_modules import consumer, provider
 
 DYNAMIC = 0x4800
@@ -37,7 +38,7 @@ def guest_module(symbols):
     return image
 
 
-def importing_executable(names, modules=()):
+def importing_executable(names, modules=(), macos=False):
     image = main_fixture()
     needed = [module + ".prx" for module in modules]
     strings, offsets = string_table([*names, *needed, *modules])
@@ -48,7 +49,11 @@ def importing_executable(names, modules=()):
     tags = [(1, offset) for offset in offsets[len(names):len(names) + len(needed)]]
     tags += [(0x61000045, (index << 48) | offset) for index, offset in enumerate(offsets[len(names) + len(needed):], 1)]
     tags += [(5, STRINGS), (10, len(strings)), (6, SYMBOLS), (11, 24),
-             (7, RELOCATIONS), (8, len(names) * 24), (9, 24), (0, 0)]
+             (7, RELOCATIONS), (8, len(names) * 24), (9, 24)]
+    if macos:
+        tags.append((0x6100003F, (len(names) + 1) * 24))
+        struct.pack_into("<I", image, 64 + 4, 7)
+    tags.append((0, 0))
     for index, tag in enumerate(tags):
         struct.pack_into("<qQ", image, DYNAMIC + index * 16, *tag)
     struct.pack_into("<QQQQQ", image, 120 + 8, DYNAMIC, DYNAMIC, DYNAMIC, len(tags) * 16, len(tags) * 16)
@@ -124,16 +129,21 @@ def imported_symbols(image):
     return names
 
 
-def relink(relinker, case, executable, modules):
+def relink(relinker, case, executable, modules, options=()):
     (case / "sce_module").mkdir(parents=True)
     source = case / "input.elf"
     source.write_bytes(executable)
     for name, image in modules.items():
         (case / "sce_module" / name).write_bytes(image)
     output = case / "output.elf"
-    result = subprocess.run([str(relinker), str(source), str(output)], capture_output=True, text=True, timeout=30)
+    result = subprocess.run([str(relinker), *options, str(source), str(output)], capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, (result.stdout, result.stderr)
     return output
+
+
+def macos_binds(image):
+    linkedit = MachO(image).segment("__LINKEDIT")
+    return image[linkedit["fileoff"]:linkedit["fileoff"] + linkedit["filesize"]]
 
 
 def convert(relinker, case):
@@ -173,6 +183,11 @@ def main():
         assert exporter == ["shared#guest"], exporter
         importer = module_symbols((guests / "c.prx.guest.prx").read_bytes())
         assert "shared" in importer and "shared#guest" not in importer, importer
+
+        binds = macos_binds(relink(relinker, work / "macos-declared",
+                                   importing_executable(["AAAAAAAAAAA#B#B", "EEEEEEEEEEE#C#C"], ["libc", "libSceLibcInternal"], True),
+                                   {"libc.prx": guest_module([("AAAAAAAAAAA", True), ("EEEEEEEEEEE", True)])}, ["--macos"]).read_bytes())
+        assert b"_AAAAAAAAAAA#guest\0" in binds and b"_EEEEEEEEEEE\0" in binds and b"_EEEEEEEEEEE#guest\0" not in binds, binds
     print("Guest symbol name tests passed")
 
 
