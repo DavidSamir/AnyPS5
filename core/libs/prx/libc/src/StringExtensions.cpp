@@ -77,6 +77,15 @@ char* APS5_VABI stpcpy_nid_postfix(char* destination, const char* source) {
     return destination + length;
 }
 
+void* APS5_VABI memrchr_nid_postfix(const void* bytes, int value, std::size_t length) {
+    const auto* begin = static_cast<const unsigned char*>(bytes);
+    const auto target = static_cast<unsigned char>(value);
+    for (const auto* cursor = begin + length; cursor != begin;) {
+        if (*--cursor == target) return const_cast<unsigned char*>(cursor);
+    }
+    return nullptr;
+}
+
 char* APS5_VABI strtok_r_nid_postfix(char* text, const char* delimiters, char** state) {
     if (text == nullptr) text = *state;
     if (text == nullptr) return nullptr;
