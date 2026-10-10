@@ -12,6 +12,8 @@ The bundle runs without the SDK or environment variables:
     Contents/MacOS/launch           enters the game folder (AnyPS5 maps /app0 under the working
                                     directory) and starts eboot
     Contents/MacOS/eboot, libs/     the title, the prx libraries, libvulkan and MoltenVK
+    Contents/MacOS/app0             link to the title's files: the title loads its guest modules from
+                                    app0 beside the executable
     Contents/Resources/game/app0    the title's files
     Contents/Resources/vulkan/icd.d MoltenVK's driver manifest
 
@@ -80,6 +82,7 @@ def package(relinked, game, libs, vulkan, input_config, bundle):
         shutil.copytree(game, app0, dirs_exist_ok=True)
     if (relinked / "app0").is_dir():
         shutil.copytree(relinked / "app0", app0, dirs_exist_ok=True)
+    (macos / "app0").symlink_to(Path("..") / "Resources" / "game" / "app0", target_is_directory=True)
     title_id, name, version = title_metadata(app0)
     identifier = "org.anyps5." + "".join(character for character in title_id.lower() if character.isalnum())
 
