@@ -360,6 +360,16 @@ int main() {
     Require(unlink_nid_postfix(lockedPosix.string().c_str()) == 0 && !std::filesystem::exists(lockedPosix));
     const auto lockedKernel = lockedFile("locked-kernel");
     Require(sceKernelUnlink(lockedKernel.string().c_str()) == 0 && !std::filesystem::exists(lockedKernel));
+    const auto lockedDirectory = [&](const char* name) {
+        const auto locked = root / name;
+        Require(mkdir_nid_postfix(locked.string().c_str(), 0700) == 0);
+        Require(sceKernelChmod_nid_postfix(locked.string().c_str(), 0555) == 0);
+        return locked;
+    };
+    const auto lockedDirectoryPosix = lockedDirectory("locked-directory-posix");
+    Require(rmdir_nid_postfix(lockedDirectoryPosix.string().c_str()) == 0 && !std::filesystem::exists(lockedDirectoryPosix));
+    const auto lockedDirectoryKernel = lockedDirectory("locked-directory-kernel");
+    Require(sceKernelRmdir(lockedDirectoryKernel.string().c_str()) == 0 && !std::filesystem::exists(lockedDirectoryKernel));
     Require(rmdir_nid_postfix("") == -1 && *__error_nid_postfix() == 2);
     Require(rmdir_nid_postfix(nullptr) == -1 && *__error_nid_postfix() == 14);
     Require(unlink_nid_postfix(missingName.c_str()) == -1 && *__error_nid_postfix() == 2);

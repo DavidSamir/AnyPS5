@@ -75,6 +75,15 @@ static constexpr std::uint64_t KERNEL_MNT_NOSUID = 0x8;
 static int NativeRmdir(const std::filesystem::path& path) {
     return ::_wrmdir(path.wstring().c_str());
 }
+static bool RemoveEmptyDirectory(const std::filesystem::path& path) {
+    struct _stat64 status{};
+    const bool unlocked = ::_wstat64(path.c_str(), &status) == 0 && !(status.st_mode & _S_IWRITE) &&
+        ::_wchmod(path.c_str(), _S_IREAD | _S_IWRITE) == 0;
+    std::error_code error;
+    if (std::filesystem::remove(path, error)) return true;
+    if (unlocked) ::_wchmod(path.c_str(), _S_IREAD);
+    return false;
+}
 static int NativeMkdir(const std::filesystem::path& path, std::uint16_t mode) {
     (void)mode;
     return ::_wmkdir(path.wstring().c_str());
@@ -204,6 +213,10 @@ static std::int64_t NativePwrite(int descriptor, const void* buf, std::size_t nb
 #include <sys/uio.h>
 static int NativeRmdir(const std::filesystem::path& path) {
     return ::rmdir(path.c_str());
+}
+static bool RemoveEmptyDirectory(const std::filesystem::path& path) {
+    std::error_code error;
+    return std::filesystem::remove(path, error);
 }
 static int NativeMkdir(const std::filesystem::path& path, std::uint16_t mode) {
     return ::mkdir(path.c_str(), static_cast<mode_t>(mode));
@@ -904,7 +917,7 @@ int APS5_VABI sceKernelRmdir(const char* path) {
     std::error_code error;
     if (!std::filesystem::is_directory(native, error)) return SceErrorFromErrno(std::filesystem::exists(native, error) ? GUEST_ENOTDIR : GUEST_ENOENT);
     if (!std::filesystem::is_empty(native, error)) return SceErrorFromErrno(GUEST_ENOTEMPTY);
-    if (!std::filesystem::remove(native, error)) return SceErrorFromErrno(GUEST_EIO);
+    if (!RemoveEmptyDirectory(native)) return SceErrorFromErrno(GUEST_EIO);
     RecordWrittenPath_nid_no_patch(native);
     return 0;
 }
