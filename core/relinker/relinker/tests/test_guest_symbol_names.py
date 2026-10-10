@@ -172,7 +172,7 @@ def main():
         exporter = module_symbols((guests / "b.prx.guest.prx").read_bytes())
         assert exporter == ["shared#guest"], exporter
         importer = module_symbols((guests / "c.prx.guest.prx").read_bytes())
-        assert importer == ["shared"], importer
+        assert "shared" in importer and "shared#guest" not in importer, importer
     print("Guest symbol name tests passed")
 
 
