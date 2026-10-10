@@ -27,6 +27,17 @@ def declared_provider(value, identities, soname=None, tag=0x61000043, symbol='sh
     return image
 
 
+def truncated_dynamic(image):
+    offset, = struct.unpack_from('<Q', image, 32)
+    size, count = struct.unpack_from('<HH', image, 54)
+    for index in range(count):
+        header = offset + index * size
+        if struct.unpack_from('<I', image, header)[0] == 2:
+            struct.pack_into('<Q', image, header + 8, len(image) + 4)
+            return image
+    raise AssertionError('The fixture has no dynamic segment')
+
+
 def sce_strings(image):
     struct.pack_into('<H', image, 56, 4)
     struct.pack_into('<IIQQQQQQ', image, 232, 0x61000000, 4, 0x800, 0, 0, 0x40, 0x40, 8)
@@ -148,6 +159,27 @@ def main():
             assert len(list((output.parent / 'app0').rglob('*.guest.prx'))) == 1
             if windows:
                 run(output)
+
+            unreadable = truncated_dynamic(declared_provider(77, ('libUnused',)))
+            result, output = convert(f'metadata-unreadable-{windows}', windows, 'libGuest.suprx', module_directory='.',
+                extra={'sce_sys/about/right.sprx': unreadable})
+            assert result.returncode == 0, result.stderr
+            assert [path.name for path in (output.parent / 'app0').rglob('*.guest.prx')] == ['renamed.prx.guest.prx']
+
+            for relative in ('sce_sys/libGuest.suprx', 'sce_sys/about/renamed.prx'):
+                result, output = convert(f'metadata-provider-{windows}-{Path(relative).name}', windows, 'libGuest.suprx',
+                    providers={'other.prx': declared_provider(77, ('libOther',))},
+                    extra={relative: declared_provider(22, ('libGuest',))})
+                assert result.returncode == 0, result.stderr
+                assert [path.name for path in (output.parent / 'app0').rglob('*.guest.prx')] == ['other.prx.guest.prx']
+                if not windows:
+                    assert 'libGuest.suprx' in needed_libraries(output.read_bytes())
+
+            result, output = convert(f'outside-unreadable-{windows}', windows, 'libGuest.suprx', module_directory='.',
+                extra={'Media/Modules/broken.sprx': unreadable})
+            assert result.returncode == 2 and 'Dynamic segment out of bounds' in result.stderr, result.stderr
+            assert 'broken.sprx' in result.stderr, result.stderr
+            assert not output.exists()
 
         for windows in (True, False):
             for tag in (0x6100000d, 0x61000043):

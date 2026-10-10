@@ -64,6 +64,7 @@ std::vector<GuestArtifact> GuestModuleBuilder::Build(const std::filesystem::path
     if (hasPrx) directories.push_back(prx);
     std::vector<std::filesystem::path> paths;
     std::set<std::string> unmatchedExclusions = excludedModules;
+    const auto metadata = root / "sce_sys";
     const auto isElf = [](const std::filesystem::path& path) {
         std::ifstream stream(path, std::ios::binary);
         if (!stream) throw Domain::RelinkerException("Cannot read guest candidate: " + path.string());
@@ -106,6 +107,10 @@ std::vector<GuestArtifact> GuestModuleBuilder::Build(const std::filesystem::path
             if (!matches.emplace(name, path).second) throw Domain::RelinkerException("Ambiguous needed module: " + matches.at(name).string() + " and " + path.string());
         };
         for (auto it = std::filesystem::recursive_directory_iterator(root); it != std::filesystem::recursive_directory_iterator(); ++it) {
+            if (it->path() == metadata) {
+                it.disable_recursion_pending();
+                continue;
+            }
             if (!it->is_regular_file()) continue;
             const auto name = it->path().filename().string();
             if (name.ends_with(GuestModuleSuffix)) continue;
@@ -157,10 +162,20 @@ std::vector<GuestArtifact> GuestModuleBuilder::Build(const std::filesystem::path
         std::map<std::string, std::filesystem::path> identities;
         for (auto it = std::filesystem::recursive_directory_iterator(root); it != std::filesystem::recursive_directory_iterator(); ++it) {
             const auto& path = it->path();
+            if (path == metadata) {
+                it.disable_recursion_pending();
+                continue;
+            }
             const auto extension = path.extension().string();
             if (!it->is_regular_file() || (extension != ".prx" && extension != ".sprx" && extension != ".suprx") ||
                 path.filename().string().ends_with(GuestModuleSuffix) || excludedModules.contains(path.filename().string()) || discovered.contains(path) || !isElf(path)) continue;
-            const auto names = GuestImageReader().ReadModuleNames(reader.Read(path.string()));
+            std::vector<std::string> names;
+            try {
+                names = GuestImageReader().ReadModuleNames(reader.Read(path.string()));
+            } catch (Domain::RelinkerException& error) {
+                error.InputPath = path.string();
+                throw;
+            }
             for (const auto& name : unresolved) {
                 if (!matchesIdentity(name, names)) continue;
                 if (!identities.emplace(name, path).second) throw Domain::RelinkerException("Ambiguous needed module identity: " + name);
