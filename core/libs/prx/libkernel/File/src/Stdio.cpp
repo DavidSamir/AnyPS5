@@ -154,6 +154,24 @@ static int NativeFutimes(int descriptor, const KernelTimeval* times) {
     }
     return result;
 }
+static int NativeSync(int descriptor) {
+    constexpr DWORD share = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
+    HANDLE handle = INVALID_HANDLE_VALUE;
+    if (const auto directory = File::DirectoryDescriptorPath(descriptor)) {
+        handle = CreateFileW(directory->c_str(), GENERIC_WRITE, share, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    } else {
+        const int previous = errno;
+        if (::_commit(descriptor) == 0) return 0;
+        const auto original = reinterpret_cast<HANDLE>(::_get_osfhandle(descriptor));
+        if (original == INVALID_HANDLE_VALUE || GetFileType(original) != FILE_TYPE_DISK) { errno = EBADF; return -1; }
+        handle = ReOpenFile(original, GENERIC_WRITE, share, 0);
+        errno = previous;
+    }
+    if (handle == INVALID_HANDLE_VALUE) return GetLastError() == ERROR_ACCESS_DENIED ? 0 : File::WindowsFileTime::Failure(GetLastError());
+    const int result = FlushFileBuffers(handle) ? 0 : File::WindowsFileTime::Failure(GetLastError());
+    CloseHandle(handle);
+    return result;
+}
 static int NativeFlock(int descriptor, int operation) {
     return File::Flock(descriptor, operation);
 }
@@ -654,7 +672,7 @@ int APS5_VABI sceKernelFstat(int d, FileStat* sb) {
 
 int APS5_VABI sceKernelFsync(int fd) {
 #ifdef _WIN32
- return ::_commit(fd);
+ return NativeSync(fd);
 #else
  return ::fsync(fd);
 #endif
@@ -663,7 +681,7 @@ int APS5_VABI sceKernelFsync(int fd) {
 int APS5_VABI sceKernelFdatasync(int fd) {
     if (fd >= GuestSockets::FirstDescriptor) return SceErrorFromErrno(GuestSockets::IsOpen(fd) ? GUEST_EINVAL : GUEST_EBADF);
 #ifdef _WIN32
-    if (::_commit(fd) != 0) return SceErrorFromErrno(errno);
+    if (NativeSync(fd) != 0) return SceErrorFromErrno(errno);
 #else
     if (::fdatasync(fd) != 0) return SceErrorFromErrno(errno);
 #endif

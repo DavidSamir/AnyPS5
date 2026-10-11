@@ -379,6 +379,16 @@ int main() {
     Require(open_nid_postfix(rootName.c_str(), 0x0200, 0644) == -1 && *__error_nid_postfix() == 21);
     Require(open_nid_postfix(rootName.c_str(), 0x0002, 0) == -1 && *__error_nid_postfix() == 21);
     Require(open_nid_postfix(rootName.c_str(), 0x0001, 0) == -1 && *__error_nid_postfix() == 21);
+    const int syncedDirectory = open_nid_postfix(rootName.c_str(), 0, 0);
+    Require(syncedDirectory >= 0 && sceKernelFsync(syncedDirectory) == 0 && fdatasync_nid_postfix(syncedDirectory) == 0);
+    Require(sceKernelFdatasync(syncedDirectory) == 0 && close_nid_postfix(syncedDirectory) == 0);
+    const int syncedReader = open_nid_postfix(presentName.c_str(), 0, 0);
+    Require(syncedReader >= 0 && sceKernelFsync(syncedReader) == 0 && fdatasync_nid_postfix(syncedReader) == 0);
+    Require(sceKernelFdatasync(syncedReader) == 0 && close_nid_postfix(syncedReader) == 0);
+    Require(sceKernelChmod_nid_postfix(presentName.c_str(), 0400) == 0);
+    const int syncedLocked = open_nid_postfix(presentName.c_str(), 0, 0);
+    Require(syncedLocked >= 0 && sceKernelFsync(syncedLocked) == 0 && close_nid_postfix(syncedLocked) == 0);
+    Require(sceKernelChmod_nid_postfix(presentName.c_str(), 0600) == 0);
     const int directoryDescriptor = open_nid_postfix(rootName.c_str(), 0, 0);
     Require(directoryDescriptor >= 0 && close_nid_postfix(directoryDescriptor) == 0);
     const int flaggedDirectory = sceKernelOpen(rootName.c_str(), 0x20000, 0);
