@@ -350,8 +350,7 @@ RelinkResult RelinkerPipeline::Relink(const std::vector<std::uint8_t>& sourceElf
     }
     auto dynSection = _dynamicSectionBuilder->BuildDynamicSection(dynamicRefs, neededLibraries, dynJmpRelOffset, pltCount);
     for (const auto& ref : dynamicRefs) {
-        if (!ref.Library.empty()) continue;
-        if (auto declared = Domain::DeclaredImportModule(ref.Nid, importModules); !declared.empty()) dynSection.UnmatchedImportModules.insert(std::move(declared));
+        if (ref.Library.empty()) dynSection.UnmatchedImportModules.insert(Domain::DeclaredImportModule(ref.Nid, importModules));
     }
 
     if (hasTag(DT_OS_SYMTABSZ)) {

@@ -350,6 +350,39 @@ def main():
                 run = subprocess.run([str(output)], capture_output=True, text=True, timeout=30)
                 assert run.returncode == 11 and 'unused.prx' not in run.stderr, (symbol, module_name, run.returncode, run.stdout, run.stderr)
 
+        result, native = convert('native-provider', 'a.prx')
+        assert result.returncode == 0, result.stderr
+        result, empty = convert('empty-provider', 'c.prx')
+        assert result.returncode == 0, result.stderr
+        shared_library = (native.parent / 'app0' / 'prx' / 'a.prx.guest.prx').read_bytes()
+        empty_library = (empty.parent / 'app0' / 'prx' / 'c.prx.guest.prx').read_bytes()
+        for index, (owner, symbol, module_name, dependencies, expected) in enumerate([
+                ('a.prx', 'shared#A#B', None, (), 11),
+                ('a.prx', 'shared', None, (), 11),
+                ('a.prx', 'shared#A#B', 'libSceJson', (), 11),
+                ('libFooUtil.prx', 'shared', None, ('a.prx',), 11),
+                ('libFoo.prx', 'shared#A#B', 'libFooUtil', ('a.prx',), 11),
+                ('a.prx', 'shared#A#B', None, ('unused.prx',), 11),
+                ('a.native.prx', 'shared#A#B', 'a', ('unused.prx',), 11),
+                ('a.prx', 'shared', None, ('unused.prx',), None),
+                ('a.prx', 'shared#A#B', 'libSceJson', ('unused.prx',), None)]):
+            case = work / ('host-provider-' + str(index))
+            (case / 'libs').mkdir(parents=True)
+            source = case / 'input.elf'
+            source.write_bytes(executable(owner, symbol, module_name, dependencies))
+            output = case / 'output.exe'
+            result = subprocess.run([str(relinker), '--windows', '--skip-sce-module', str(source), str(output)], capture_output=True, text=True, timeout=30)
+            assert result.returncode == 0, (index, result.stdout, result.stderr)
+            for library in (owner,) + dependencies:
+                if library != 'unused.prx':
+                    (case / 'libs' / library).write_bytes(shared_library if library.startswith('a.') else empty_library)
+            if os.name == 'nt':
+                run = subprocess.run([str(output)], capture_output=True, text=True, timeout=30)
+                if expected is None:
+                    assert run.returncode != 0 and 'Failed to load module:' in run.stderr and 'unused.prx' in run.stderr, (index, run.returncode, run.stdout, run.stderr)
+                else:
+                    assert run.returncode == expected and 'unused.prx' not in run.stderr, (index, run.returncode, run.stdout, run.stderr)
+
     print('Windows module-scoped import tests passed')
 
 

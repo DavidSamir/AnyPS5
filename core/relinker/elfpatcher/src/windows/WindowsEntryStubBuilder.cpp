@@ -64,7 +64,7 @@ std::u16string toUtf16(const std::string& text) {
 
 }
 
-WindowsEntryStub WindowsEntryStubBuilder::Build(const std::uint32_t dataRva, const std::uint32_t entryRva, const WindowsImports& nativeImports, const std::vector<std::string>& libraries, const std::vector<PeImport>& imports, const std::string& runPath, const bool lazyBinding, const bool dependencyDiagnostics, const std::vector<Domain::GuestRuntime>& guestModules, const std::set<std::string>& unmatchedImportModules) const {
+WindowsEntryStub WindowsEntryStubBuilder::Build(const std::uint32_t dataRva, const std::uint32_t entryRva, const WindowsImports& nativeImports, const std::vector<std::string>& libraries, const std::vector<PeImport>& imports, const std::string& runPath, const bool lazyBinding, const bool dependencyDiagnostics, const std::vector<Domain::GuestRuntime>& guestModules, const std::set<std::string>& unmatchedImportModules, const std::set<std::string>& guestExports) const {
     if (!imports.empty() && libraries.empty())
         throw Domain::RelinkerException("ELF imports have no DT_NEEDED libraries");
     const auto path = normalizeRunPath(runPath);
@@ -180,6 +180,11 @@ WindowsEntryStub WindowsEntryStubBuilder::Build(const std::uint32_t dataRva, con
     for (std::size_t index = guestModules.size(); index < libraries.size(); ++index) {
         if (unmatched.contains(stem(libraries[index]))) imported[index] = true;
     }
+    const bool unplacedModule = std::any_of(unmatched.begin(), unmatched.end(), [&](const auto& module) {
+        return std::none_of(libraries.begin() + guestModules.size(), libraries.end(), [&](const auto& library) { return stem(library) == module; });
+    });
+    const bool hostImport = std::any_of(imports.begin(), imports.end(), [&](const auto& import) { return import.Library.empty() && !guestExports.contains(import.Name); });
+    if (unplacedModule && hostImport) std::fill(imported.begin() + guestModules.size(), imported.end(), true);
 
     const auto lastError = reserve(4);
     const auto errorDigits = reserve(11);
@@ -188,7 +193,6 @@ WindowsEntryStub WindowsEntryStubBuilder::Build(const std::uint32_t dataRva, con
     const auto loaded = addString(" -> OK\n");
     const auto loadFailed = addString(" -> FAILED\n");
     const auto failedModule = addString("Failed to load module: ");
-    const auto skippedModule = addString(" -> not found; nothing is imported from it, continuing without it\n");
     const auto errorPrefix = addString("GetLastError: ");
     const auto messageSeparator = addString(" - ");
     const auto newline = addString("\n");
