@@ -44,6 +44,7 @@ class FileStream {
     std::FILE* _handle;
     bool _dynamic;
     bool guestError = false;
+    int pipe = -1;
 
 public:
     explicit FileStream(std::FILE* handle, bool dynamic = false) : _handle(handle), _dynamic(dynamic) {
@@ -70,10 +71,16 @@ public:
     }
 
     GuestFilePrefix& GuestState() { return _guest; }
+    template <typename TQuery>
+    bool IsPipe(TQuery query) {
+        if (pipe < 0) pipe = query(GetHandle()) ? 1 : 0;
+        return pipe > 0;
+    }
     bool Reopen(const std::filesystem::path& filename, const char* mode) {
         auto* previous = GetHandle();
         _guest = {};
         guestError = false;
+        pipe = -1;
 #ifdef _WIN32
         std::wstring wideMode;
         for (const char character : std::string_view(mode)) wideMode.push_back(static_cast<unsigned char>(character));

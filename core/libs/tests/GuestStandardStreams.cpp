@@ -13,7 +13,9 @@
 #include <atomic>
 #include <thread>
 #include <stdexcept>
-#ifndef _WIN32
+#ifdef _WIN32
+#include <fcntl.h>
+#else
 #include <unistd.h>
 #endif
 extern "C" {
@@ -267,18 +269,28 @@ static void CheckRewind() {
     rewind_nid_postfix(&stream);
     Require(feof_nid_postfix(&stream) == 0 && ferror_nid_postfix(&stream) == 0 && fgetc_nid_postfix(&stream) == 'a');
     stream.Close();
-#ifndef _WIN32
     int pipeEnds[2];
+#ifdef _WIN32
+    Require(_pipe(pipeEnds, 4096, _O_BINARY) == 0 && _write(pipeEnds[1], "pq", 2) == 2 && _close(pipeEnds[1]) == 0);
+    FileStream pipe(_fdopen(pipeEnds[0], "rb"));
+#else
     Require(::pipe(pipeEnds) == 0);
-    Require(::write(pipeEnds[1], "p", 1) == 1);
+    Require(::write(pipeEnds[1], "pq", 2) == 2);
     ::close(pipeEnds[1]);
     FileStream pipe(::fdopen(pipeEnds[0], "r"));
-    Require(fgetc_nid_postfix(&pipe) == 'p' && fgetc_nid_postfix(&pipe) == EOF && feof_nid_postfix(&pipe) != 0);
+#endif
+    Require(fgetc_nid_postfix(&pipe) == 'p');
+    for (const int origin : {SEEK_SET, SEEK_CUR, SEEK_END}) {
+        *__error_nid_postfix() = 0;
+        Require(fseeko_nid_postfix(&pipe, 0, origin) == -1 && *__error_nid_postfix() == 29);
+    }
+    *__error_nid_postfix() = 0;
+    Require(ftello_nid_postfix(&pipe) == -1 && *__error_nid_postfix() == 29 && ferror_nid_postfix(&pipe) == 0);
+    Require(fgetc_nid_postfix(&pipe) == 'q' && fgetc_nid_postfix(&pipe) == EOF && feof_nid_postfix(&pipe) != 0);
     *__error_nid_postfix() = 0;
     rewind_nid_postfix(&pipe);
     Require(*__error_nid_postfix() == 29 && feof_nid_postfix(&pipe) == 0 && ferror_nid_postfix(&pipe) == 0);
     pipe.Close();
-#endif
 }
 
 static void CheckFlushWhileReading() {
