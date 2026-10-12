@@ -13,6 +13,8 @@
 #ifdef _WIN32
 #include <io.h>
 #include "prx/libc/include/FileLock.hpp"
+extern "C" void* HostStandardHandle_nid_no_patch(int descriptor);
+extern "C" void KeepStandardHandle_nid_no_patch(int descriptor, void* handle);
 #endif
 
 struct GuestFilePrefix {
@@ -77,8 +79,11 @@ public:
 #ifdef _WIN32
         std::wstring wideMode;
         for (const char character : std::string_view(mode)) wideMode.push_back(static_cast<unsigned char>(character));
-        GuestFileLockForget_nid_no_patch(::_fileno(previous));
+        const int replaced = previous ? _fileno(previous) : -1;
+        auto* const standard = HostStandardHandle_nid_no_patch(replaced);
+        GuestFileLockForget_nid_no_patch(replaced);
         _handle = ::_wfreopen(filename.c_str(), wideMode.c_str(), previous);
+        KeepStandardHandle_nid_no_patch(replaced, standard);
 #else
         _handle = std::freopen(filename.c_str(), mode, previous);
 #endif

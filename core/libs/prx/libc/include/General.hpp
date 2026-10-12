@@ -26,6 +26,8 @@ extern "C" void SyncWrittenPaths_nid_no_patch();
 extern "C" void BlockPathAlias_nid_no_patch(const char* guestPrefix);
 #ifdef _WIN32
 extern "C" int WindowsOpenError_nid_no_patch(unsigned long error);
+extern "C" void* HostStandardHandle_nid_no_patch(int descriptor);
+extern "C" void KeepStandardHandle_nid_no_patch(int descriptor, void* handle);
 #endif
 
 #define APS5_INVALID_ARG_EX throw std::invalid_argument(std::string(__func__) + ": invalid argument")

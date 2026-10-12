@@ -20,6 +20,7 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
+#include <io.h>
 #else
 #include <ctime>
 #include <fcntl.h>
@@ -433,6 +434,28 @@ extern "C" int WindowsOpenError_nid_no_patch(unsigned long error) {
     default:
         return EINVAL;
     }
+}
+
+extern "C" _invalid_parameter_handler _set_thread_local_invalid_parameter_handler(_invalid_parameter_handler);
+static DWORD StandardHandleId(int descriptor) {
+    return descriptor == 0 ? STD_INPUT_HANDLE : descriptor == 1 ? STD_OUTPUT_HANDLE : STD_ERROR_HANDLE;
+}
+extern "C" void* HostStandardHandle_nid_no_patch(int descriptor) {
+    if (descriptor < 0 || descriptor > 2) return nullptr;
+    const HANDLE current = GetStdHandle(StandardHandleId(descriptor));
+    if (current == nullptr || current == INVALID_HANDLE_VALUE) return nullptr;
+    const auto previous = _set_thread_local_invalid_parameter_handler([](const wchar_t*, const wchar_t*, const wchar_t*, unsigned int, std::uintptr_t) {});
+    const auto owned = ::_get_osfhandle(descriptor);
+    _set_thread_local_invalid_parameter_handler(previous);
+    if (reinterpret_cast<HANDLE>(owned) != current) return current;
+    HANDLE kept = nullptr;
+    if (!DuplicateHandle(GetCurrentProcess(), current, GetCurrentProcess(), &kept, 0, TRUE, DUPLICATE_SAME_ACCESS))
+        throw std::runtime_error("Cannot keep the host standard handle of descriptor " + std::to_string(descriptor));
+    return kept;
+}
+extern "C" void KeepStandardHandle_nid_no_patch(int descriptor, void* handle) {
+    if (handle != nullptr && !SetStdHandle(StandardHandleId(descriptor), handle))
+        throw std::runtime_error("Cannot keep the host standard handle of descriptor " + std::to_string(descriptor));
 }
 #endif
 

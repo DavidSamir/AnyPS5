@@ -578,7 +578,10 @@ int APS5_VABI dup2_nid_postfix(int from, int to) {
     if (from == to) return to;
     RejectDirectoryDuplicate(from, __func__);
     if (to == 2) PreserveHostStandardError();
-    if (WithoutParameterHandler([from, to] { return ::_dup2(from, to); }) != 0) return PosixFailure(SceErrorFromErrno(errno) & 0xffff);
+    auto* const standard = HostStandardHandle_nid_no_patch(to);
+    const int duplicated = WithoutParameterHandler([from, to] { return ::_dup2(from, to); });
+    KeepStandardHandle_nid_no_patch(to, standard);
+    if (duplicated != 0) return PosixFailure(SceErrorFromErrno(errno) & 0xffff);
     File::ForgetDirectoryDescriptor(to);
     File::ForgetFileLock(to);
     File::ForgetRandomDevice(to);

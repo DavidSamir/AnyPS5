@@ -250,6 +250,34 @@ int main() {
     std::rewind(hostCapture);
     Require(std::fread(debugText, 1, sizeof(debugText), hostCapture) == 15 && std::memcmp(debugText, "[debug:1] kept\n", 15) == 0);
     Require(std::fclose(hostCapture) == 0);
+#ifdef _WIN32
+    for (const bool reopen : {false, true}) {
+        auto* hostCapture = std::tmpfile();
+        const int hostError = ::_dup(2);
+        Require(hostCapture != nullptr && hostError >= 0);
+        int redirect[2] = {-1, -1};
+        Require(reopen || pipe_nid_postfix(redirect) == 0);
+        const bool captured = ::_dup2(::_fileno(hostCapture), 2) == 0 && SetStdHandle(STD_ERROR_HANDLE, reinterpret_cast<HANDLE>(::_get_osfhandle(2)));
+        const bool redirected = reopen ? freopen_nid_postfix("stderr_probe.txt", "w", &_Stderr_nid_postfix) == &_Stderr_nid_postfix : dup2_nid_postfix(redirect[1], 2) == 2;
+        const HANDLE kept = GetStdHandle(STD_ERROR_HANDLE);
+        DWORD count = 0;
+        const bool separate = kept != reinterpret_cast<HANDLE>(::_get_osfhandle(2)) && WriteFile(kept, "kept", 4, &count, nullptr) && count == 4;
+        const bool written = write_nid_postfix(2, "G", 1) == 1;
+        const bool restored = ::_dup2(hostError, 2) == 0 && ::_close(hostError) == 0 && SetStdHandle(STD_ERROR_HANDLE, reinterpret_cast<HANDLE>(::_get_osfhandle(2)));
+        Require(captured && redirected && separate && written && restored && CloseHandle(kept));
+        std::rewind(hostCapture);
+        char keptText[8]{};
+        Require(std::fread(keptText, 1, sizeof(keptText), hostCapture) == 4 && std::memcmp(keptText, "kept", 4) == 0);
+        Require(std::fclose(hostCapture) == 0);
+        char guestText = 0;
+        if (reopen) {
+            Require(std::filesystem::file_size("stderr_probe.txt") == 1 && std::filesystem::remove("stderr_probe.txt"));
+        } else {
+            Require(close_nid_postfix(redirect[1]) == 0 && read_nid_postfix(redirect[0], &guestText, 1) == 1 && guestText == 'G');
+            Require(close_nid_postfix(redirect[0]) == 0);
+        }
+    }
+#endif
     const auto root = std::filesystem::path("anyps5-filesystem-test-" +
         std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     Require(mkdir_nid_postfix(root.string().c_str(), 0700) == 0);
