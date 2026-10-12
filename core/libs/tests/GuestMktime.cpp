@@ -61,19 +61,6 @@ static void CheckFailure(Converter convert) {
     const GuestTm original = input;
     Require(convert(&input) == -1, "mktime accepted an unrepresentable calendar");
     Require(Equal(input, original), "Failed mktime changed the guest calendar");
-#ifdef _WIN32
-    input = {};
-    input.tm_year = 69;
-    input.tm_mon = 11;
-    input.tm_mday = 31;
-    input.tm_hour = 23;
-    input.tm_min = 59;
-    input.tm_sec = 59;
-    input.tm_zone = "unchanged";
-    const GuestTm beforeEpoch = input;
-    Require(convert(&input) == -1, "Windows mktime accepted a time before the epoch");
-    Require(Equal(input, beforeEpoch), "Failed Windows mktime changed the guest calendar");
-#endif
 }
 
 static void CheckZone(const char* zone) {
@@ -87,9 +74,6 @@ static void CheckZone(const char* zone) {
     constexpr std::array<std::int64_t, 8> timers{-86401, -2, -1, 0, 1, 59, 60, 86400};
     for (auto convert : converters) {
         for (const auto timer : timers) {
-#ifdef _WIN32
-            if (timer < 0) continue;
-#endif
             CheckNormalization(convert, timer);
         }
         CheckFailure(convert);
@@ -99,7 +83,5 @@ static void CheckZone(const char* zone) {
 int main() {
     CheckZone("UTC0");
     CheckZone("UTC-2");
-#ifndef _WIN32
     CheckZone("UTC5");
-#endif
 }
