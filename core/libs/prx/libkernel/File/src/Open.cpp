@@ -43,7 +43,11 @@ static int NativeOpen(const std::filesystem::path& p, int nativeFlags, std::uint
 }
 static std::int64_t NativeLseek(int fd, std::int64_t offset, int whence) {
     const auto result = File::SeekSharedMemory_nid_no_patch(fd, offset, whence);
-    return result == -2 ? ::_lseeki64(fd, offset, whence) : result;
+    if (result != -2) return result;
+    const auto position = ::_lseeki64(fd, offset, whence);
+    if (position < 0 || GetFileType(reinterpret_cast<HANDLE>(::_get_osfhandle(fd))) != FILE_TYPE_PIPE) return position;
+    errno = ESPIPE;
+    return -1;
 }
 static int NativeRead(int fd, void* buf, std::size_t n) {
     if (n > static_cast<std::size_t>(std::numeric_limits<unsigned int>::max())) {

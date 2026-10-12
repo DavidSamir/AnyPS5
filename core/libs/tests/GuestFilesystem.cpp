@@ -64,6 +64,7 @@ FileStream* APS5_VABI fopen_nid_postfix(const char*, const char*);
 FileStream* APS5_VABI freopen_nid_postfix(const char*, const char*, FileStream*);
 int* APS5_VABI __error_nid_postfix();
 int APS5_VABI pipe_nid_postfix(int*);
+std::int64_t APS5_VABI lseek_nid_postfix(int, std::int64_t, int);
 std::int64_t APS5_VABI read_nid_postfix(int, void*, std::size_t);
 std::int64_t APS5_VABI write_nid_postfix(int, const void*, std::size_t);
 int APS5_VABI sceKernelDebugOutText(int, const char*);
@@ -213,6 +214,20 @@ int main() {
     Require(read_nid_postfix(descriptors[0], received, sizeof(received)) == sizeof(received));
     Require(std::memcmp(received, payload, sizeof(payload)) == 0);
     Require(read_nid_postfix(descriptors[0], received, sizeof(received)) == 0);
+    {
+        int unseekable[2] = {-1, -1};
+        Require(pipe_nid_postfix(unseekable) == 0 && write_nid_postfix(unseekable[1], "pipe", 4) == 4);
+        for (const int end : unseekable) {
+            for (int whence = 0; whence < 3; ++whence) {
+                Require(lseek_nid_postfix(end, 0, whence) == -1 && *__error_nid_postfix() == 29);
+                Require(sceKernelLseek(end, 1, whence) == static_cast<int>(0x8002001du));
+            }
+        }
+        char piped[8]{};
+        Require(read_nid_postfix(unseekable[0], piped, sizeof(piped)) == 4 && std::memcmp(piped, "pipe", 4) == 0);
+        Require(close_nid_postfix(unseekable[0]) == 0 && close_nid_postfix(unseekable[1]) == 0);
+        Require(lseek_nid_postfix(unseekable[0], 0, 1) == -1 && *__error_nid_postfix() == 9);
+    }
     {
         std::filesystem::remove("creat_probe.bin");
         int created = creat_nid_postfix("creat_probe.bin", 0644);
