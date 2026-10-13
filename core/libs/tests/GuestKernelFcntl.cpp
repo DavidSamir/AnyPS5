@@ -5,6 +5,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -178,6 +180,22 @@ static void FileFlagsRoundTrip() {
     Require(fcntl_nid_postfix(appending, GetFlags) == (WriteOnly | Append | NonBlocking));
     Require(fcntl_nid_postfix(appending, SetFlags, 0) == 0);
     Require(fcntl_nid_postfix(appending, GetFlags) == WriteOnly);
+    const auto contents = [] {
+        std::ifstream stream("kernel_fcntl_append.bin", std::ios::binary);
+        return std::string((std::istreambuf_iterator<char>(stream)), {});
+    };
+    const int plain = sceKernelOpen("kernel_fcntl_append.bin", 0x601, 0644);
+    Require(plain >= 0 && write_nid_postfix(plain, "abc", 3) == 3 && sceKernelLseek(plain, 0, 0) == 0);
+    Require(write_nid_postfix(plain, "X", 1) == 1 && contents() == "Xbc");
+    const int shared = fcntl_nid_postfix(plain, DuplicateCommand, 0);
+    Require(shared >= 0 && fcntl_nid_postfix(shared, SetFlags, Append) == 0);
+    Require(fcntl_nid_postfix(plain, GetFlags) == (WriteOnly | Append));
+    Require(sceKernelLseek(plain, 0, 0) == 0 && write_nid_postfix(plain, "Y", 1) == 1 && contents() == "XbcY");
+    Require(sceKernelLseek(shared, 1, 0) == 1 && write_nid_postfix(shared, "Z", 1) == 1 && contents() == "XbcYZ");
+    Require(fcntl_nid_postfix(plain, SetFlags, 0) == 0 && fcntl_nid_postfix(shared, GetFlags) == WriteOnly);
+    Require(sceKernelLseek(shared, 1, 0) == 1 && write_nid_postfix(shared, "W", 1) == 1 && contents() == "XWcYZ");
+    Require(sceKernelLseek(plain, 0, 1) == 2 && close_nid_postfix(shared) == 0 && sceKernelClose(plain) == 0);
+    std::remove("kernel_fcntl_append.bin");
     Require(ThrowsWith([appending] { fcntl_nid_postfix(appending, SetFlags, Append | 0x80); }, "fcntl: changing O_FSYNC on a file is not implemented"));
     Require(sceKernelClose(appending) == 0);
     std::remove("kernel_fcntl_probe.bin");
