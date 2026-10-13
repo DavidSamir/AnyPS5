@@ -40,6 +40,7 @@ int* APS5_VABI __error_nid_postfix();
 std::int64_t APS5_VABI sceKernelWritev(int, const GuestIovec*, int);
 std::int64_t APS5_VABI sceKernelPreadv(int, const GuestIovec*, int, std::int64_t);
 std::int64_t APS5_VABI sceKernelPwritev(int, const GuestIovec*, int, std::int64_t);
+int APS5_VABI fcntl_nid_postfix(int, int, ...);
 std::int64_t APS5_VABI preadv_nid_postfix(int, const GuestIovec*, int, std::int64_t);
 std::int64_t APS5_VABI pwritev_nid_postfix(int, const GuestIovec*, int, std::int64_t);
 int* APS5_VABI __error_nid_postfix();
@@ -208,11 +209,16 @@ int main() {
     Require(std::memcmp(first, "xyz", 3) == 0);
     Require(sceKernelPreadv(ends[0], reads, 2, 0) == ErrorEspipe);
     Require(sceKernelPwritev(ends[1], message, 1, 0) == ErrorEspipe);
-#ifndef _WIN32
-    Require(::fcntl(ends[0], F_SETFL, ::fcntl(ends[0], F_GETFL) | O_NONBLOCK) == 0);
+    Require(fcntl_nid_postfix(ends[0], 4, 4) == 0 && fcntl_nid_postfix(ends[1], 4, 4) == 0);
     Require(sceKernelReadv(ends[0], reads, 2) == ErrorEagain);
     Require(readv_nid_postfix(ends[0], reads, 2) == -1 && *__error_nid_postfix() == 35);
-#endif
+    char block[16]{};
+    GuestIovec filler[2] = {{block, 8}, {block + 8, 8}};
+    int filled = 0;
+    while (filled < 65536 && sceKernelWritev(ends[1], filler, 2) == 16) ++filled;
+    Require(filled > 0 && filled < 65536 && sceKernelWritev(ends[1], filler, 2) == ErrorEagain);
+    Require(writev_nid_postfix(ends[1], filler, 2) == -1 && *__error_nid_postfix() == 35);
+    Require(sceKernelReadv(ends[0], reads, 1) == 3);
     Require(ClosePipe(ends[0]) == 0 && ClosePipe(ends[1]) == 0);
 
     const int random = sceKernelOpen("/dev/urandom", 0, 0);

@@ -210,7 +210,14 @@ static std::int64_t NativeTransfer(int descriptor, void* buf, std::size_t nbytes
         const auto result = File::WriteSharedMemory_nid_no_patch(descriptor, buf, nbytes);
         if (result != -2) return result;
     }
-    return write ? ::_write(descriptor, buf, static_cast<unsigned int>(nbytes)) : ::_read(descriptor, buf, static_cast<unsigned int>(nbytes));
+    if (write) {
+        const int result = ::_write(descriptor, buf, static_cast<unsigned int>(nbytes));
+        if (result < 0 && errno == ENOSPC && _doserrno == 0 && ::GetFileType(reinterpret_cast<HANDLE>(::_get_osfhandle(descriptor))) == FILE_TYPE_PIPE) errno = EAGAIN;
+        return result;
+    }
+    const int result = ::_read(descriptor, buf, static_cast<unsigned int>(nbytes));
+    if (result < 0 && _doserrno == ERROR_NO_DATA) errno = EAGAIN;
+    return result;
 }
 static bool NativeIsDisk(int descriptor) {
     const auto handle = reinterpret_cast<HANDLE>(::_get_osfhandle(descriptor));
