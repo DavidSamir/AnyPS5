@@ -176,12 +176,8 @@ static void FileFlagsRoundTrip() {
     Require(fcntl_nid_postfix(appending, GetFlags) == (WriteOnly | Append));
     Require(fcntl_nid_postfix(appending, SetFlags, Append | NonBlocking) == 0);
     Require(fcntl_nid_postfix(appending, GetFlags) == (WriteOnly | Append | NonBlocking));
-#ifdef _WIN32
-    Require(ThrowsWith([appending] { fcntl_nid_postfix(appending, SetFlags, 0); }, "fcntl: changing O_APPEND on a file is not implemented"));
-#else
     Require(fcntl_nid_postfix(appending, SetFlags, 0) == 0);
     Require(fcntl_nid_postfix(appending, GetFlags) == WriteOnly);
-#endif
     Require(ThrowsWith([appending] { fcntl_nid_postfix(appending, SetFlags, Append | 0x80); }, "fcntl: changing O_FSYNC on a file is not implemented"));
     Require(sceKernelClose(appending) == 0);
     std::remove("kernel_fcntl_probe.bin");

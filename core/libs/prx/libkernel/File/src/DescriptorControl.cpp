@@ -17,8 +17,10 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #ifdef _WIN32
+#include <fcntl.h>
 #include <io.h>
 #include <windows.h>
 #include <winternl.h>
@@ -192,8 +194,38 @@ Entry InitialEntry(int fd) {
     return {false, std::make_shared<int>(status)};
 }
 
+bool SameOpenFile(int first, int second, const char* function) {
+    using Compare = BOOL(WINAPI*)(HANDLE, HANDLE);
+    static const auto compare = reinterpret_cast<Compare>(reinterpret_cast<void*>(::GetProcAddress(::GetModuleHandleW(L"kernelbase.dll"), "CompareObjectHandles")));
+    if (compare == nullptr) throw std::runtime_error(std::string(function) + ": cannot compare the handles of descriptors " + std::to_string(first) + " and " + std::to_string(second));
+    return compare(NativeHandle(first), NativeHandle(second)) != FALSE;
+}
+
+void SetAppend(int fd, bool append, const char* function) {
+    const int translation = ::_setmode(fd, _O_BINARY);
+    HANDLE copy = nullptr;
+    if (translation == -1 || ::_setmode(fd, translation) == -1
+        || !::DuplicateHandle(::GetCurrentProcess(), NativeHandle(fd), ::GetCurrentProcess(), &copy, 0, TRUE, DUPLICATE_SAME_ACCESS))
+        throw std::runtime_error(std::string(function) + ": cannot duplicate the handle of descriptor " + std::to_string(fd) + ", error=" + std::to_string(::GetLastError()));
+    const int replacement = ::_open_osfhandle(reinterpret_cast<std::intptr_t>(copy), (append ? _O_APPEND : 0) | translation);
+    if (replacement < 0) ::CloseHandle(copy);
+    const int moved = replacement < 0 ? -1 : ::_dup2(replacement, fd);
+    if (replacement >= 0) ::_close(replacement);
+    if (moved != 0)
+        throw std::runtime_error(std::string(function) + ": cannot change O_APPEND on descriptor " + std::to_string(fd) + ", errno=" + std::to_string(errno));
+}
+
 void ApplyHostStatus(int fd, Kind kind, int changed, int next, const char* function) {
-    if ((changed & Append) && kind == Kind::File) Unsupported(function, "changing O_APPEND", kind, fd);
+    if ((changed & Append) && kind == Kind::File) {
+        const auto shared = g_entries.at(fd).status;
+        std::vector<int> descriptors;
+        for (const auto& [descriptor, entry] : g_entries) {
+            if (descriptor != fd && (entry.status != shared || !DescriptorIsOpen_nid_no_patch(descriptor) || !SameOpenFile(descriptor, fd, function))) continue;
+            if (descriptor <= 2) Unsupported(function, "changing O_APPEND", kind, descriptor);
+            descriptors.push_back(descriptor);
+        }
+        for (const int descriptor : descriptors) SetAppend(descriptor, (next & Append) != 0, function);
+    }
     if ((changed & Nonblocking) && kind == Kind::Device) Unsupported(function, "changing O_NONBLOCK", kind, fd);
     if ((changed & Nonblocking) && kind == Kind::Pipe) SetPipeNonblocking(fd, (next & Nonblocking) != 0, function);
 }
