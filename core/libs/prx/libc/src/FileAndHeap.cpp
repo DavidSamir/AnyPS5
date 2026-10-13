@@ -88,6 +88,33 @@ static std::FILE* OpenNative(const std::filesystem::path& path, const std::strin
 }
 
 #ifdef _WIN32
+static bool ShareReopenedFile(std::FILE* stream, const std::filesystem::path& path, const std::string& nativeMode) {
+    const bool update = nativeMode.find('+') != std::string::npos;
+    const DWORD desired = update ? GENERIC_READ | GENERIC_WRITE : nativeMode[0] == 'r' ? GENERIC_READ : GENERIC_WRITE;
+    SECURITY_ATTRIBUTES security{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
+    const auto handle = CreateFileW(path.c_str(), desired, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, &security,
+        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (handle == INVALID_HANDLE_VALUE) {
+        errno = WindowsOpenError_nid_no_patch(GetLastError());
+        return false;
+    }
+    const int shared = ::_open_osfhandle(reinterpret_cast<std::intptr_t>(handle), (nativeMode[0] == 'a' ? _O_APPEND : 0) | _O_BINARY);
+    if (shared < 0) {
+        CloseHandle(handle);
+        return false;
+    }
+    const int descriptor = _fileno(stream);
+    auto* const standard = HostStandardHandle_nid_no_patch(descriptor);
+    const int moved = ::_dup2(shared, descriptor);
+    const int error = errno;
+    KeepStandardHandle_nid_no_patch(descriptor, standard);
+    ::_close(shared);
+    errno = error;
+    return moved == 0;
+}
+#endif
+
+#ifdef _WIN32
 static bool AppendThroughDescriptor(int descriptor) {
     const auto handle = reinterpret_cast<HANDLE>(::_get_osfhandle(descriptor));
     if (handle == INVALID_HANDLE_VALUE) return false;
@@ -252,7 +279,16 @@ FileStream* APS5_VABI freopen_nid_postfix(const char* filename, const char* mode
                 return nullptr;
             }
         }
-        if (stream->Reopen(path, parsed->native.c_str())) {
+        bool reopened = stream->Reopen(path, parsed->native.c_str());
+#ifdef _WIN32
+        if (reopened && !ShareReopenedFile(stream->GetHandle(), path, parsed->native)) {
+            const int error = errno;
+            stream->Close();
+            errno = error;
+            reopened = false;
+        }
+#endif
+        if (reopened) {
             if (parsed->append) static_cast<void>(std::fseek(stream->GetHandle(), 0, SEEK_END));
             if (!path.empty() && parsed->writes) RecordWrittenPath_nid_no_patch(path);
             return stream;
