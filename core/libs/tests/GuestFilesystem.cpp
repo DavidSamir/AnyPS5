@@ -201,9 +201,47 @@ static void TestRelinkedModuleNames() {
     std::filesystem::remove_all(root);
 }
 
+static void TestReadOnlyTruncatingOpen() {
+    const auto root = std::filesystem::path("anyps5-read-only-truncate-" +
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    Require(std::filesystem::create_directories(root));
+    const auto name = (root / "data").generic_string();
+    { std::ofstream file(name, std::ios::binary); file << "0123456789"; }
+    const int holder = sceKernelOpen(name.c_str(), 2, 0);
+    Require(holder >= 0);
+    const int truncating = sceKernelOpen(name.c_str(), 0x400, 0);
+    Require(truncating >= 0);
+    Require(std::filesystem::file_size(name) == 0);
+    FileStat status{};
+    Require(sceKernelFstat(holder, &status) == 0 && status.st_size == 0);
+    Require(write_nid_postfix(truncating, "x", 1) == -1 && *__error_nid_postfix() == 9);
+    Require(sceKernelFtruncate(truncating, 4) == static_cast<int>(0x80020016u));
+    Require(std::filesystem::file_size(name) == 0);
+    Require(write_nid_postfix(holder, "abc", 3) == 3);
+    char text[8]{};
+    Require(read_nid_postfix(truncating, text, sizeof(text)) == 3 && std::memcmp(text, "abc", 3) == 0);
+    Require(sceKernelClose(truncating) == 0 && sceKernelClose(holder) == 0);
+    Require(sceKernelOpen((root / "missing").generic_string().c_str(), 0x400, 0) == static_cast<int>(0x80020002u));
+    Require(!std::filesystem::exists(root / "missing"));
+    Require(sceKernelOpen(root.generic_string().c_str(), 0x400, 0) == static_cast<int>(0x80020015u));
+    { std::ofstream file(name, std::ios::binary); file << "locked"; }
+#ifdef _WIN32
+    const bool permissionsApply = true;
+#else
+    const bool permissionsApply = ::geteuid() != 0;
+#endif
+    if (permissionsApply) {
+        Require(chmod_nid_postfix(name.c_str(), 0444) == 0);
+        Require(sceKernelOpen(name.c_str(), 0x400, 0) == static_cast<int>(0x8002000du));
+        Require(chmod_nid_postfix(name.c_str(), 0644) == 0);
+        Require(std::filesystem::file_size(name) == 6);
+    }
+    std::filesystem::remove_all(root);
+}
 int main() {
     TestParentTraversal();
     TestRelinkedModuleNames();
+    TestReadOnlyTruncatingOpen();
     Require(chmod_nid_postfix(nullptr, 0600) == -1 && *__error_nid_postfix() == 14);
     Require(sceKernelChmod_nid_postfix(nullptr, 0600) == static_cast<int>(0x8002000eu));
     Require(chmod_nid_postfix("", 0600) == -1 && *__error_nid_postfix() == 2);
