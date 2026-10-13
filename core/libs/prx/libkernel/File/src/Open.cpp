@@ -28,14 +28,19 @@
 #include <windows.h>
 static int NativeOpen(const std::filesystem::path& p, int nativeFlags, std::uint16_t mode) {
     const int access = nativeFlags & (_O_RDONLY | _O_WRONLY | _O_RDWR);
-    const DWORD desired = access == _O_RDONLY ? GENERIC_READ : access == _O_WRONLY ? GENERIC_WRITE : GENERIC_READ | GENERIC_WRITE;
+    const bool truncatesReadOnly = access == _O_RDONLY && (nativeFlags & (_O_CREAT | _O_TRUNC)) == _O_TRUNC;
+    const DWORD desired = truncatesReadOnly || access == _O_RDWR ? GENERIC_READ | GENERIC_WRITE : access == _O_RDONLY ? GENERIC_READ : GENERIC_WRITE;
     DWORD disposition = OPEN_EXISTING;
     if (nativeFlags & _O_CREAT) disposition = (nativeFlags & _O_EXCL) ? CREATE_NEW : (nativeFlags & _O_TRUNC) ? CREATE_ALWAYS : OPEN_ALWAYS;
     else if (nativeFlags & _O_TRUNC) disposition = TRUNCATE_EXISTING;
     const DWORD attributes = (nativeFlags & _O_CREAT) && !(mode & _S_IWRITE) ? FILE_ATTRIBUTE_READONLY : FILE_ATTRIBUTE_NORMAL;
     SECURITY_ATTRIBUTES security{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
-    const auto handle = CreateFileW(p.c_str(), desired, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, &security, disposition, attributes, nullptr);
+    auto handle = CreateFileW(p.c_str(), desired, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, &security, disposition, attributes, nullptr);
     if (handle == INVALID_HANDLE_VALUE) {
+        errno = WindowsOpenError_nid_no_patch(GetLastError());
+        return -1;
+    }
+    if (truncatesReadOnly && !DuplicateHandle(GetCurrentProcess(), handle, GetCurrentProcess(), &handle, FILE_GENERIC_READ, TRUE, DUPLICATE_CLOSE_SOURCE)) {
         errno = WindowsOpenError_nid_no_patch(GetLastError());
         return -1;
     }
