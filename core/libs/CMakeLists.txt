@@ -758,6 +758,16 @@ if(BUILD_TESTING)
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libSceNpCppWebApi>")
     endif()
 
+    add_test_executable(guest_np_cpp_web_api_offline_tests tests/GuestNpCppWebApiOffline.cpp)
+    target_include_directories(guest_np_cpp_web_api_offline_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(guest_np_cpp_web_api_offline_tests PRIVATE libSceNpCppWebApi libc)
+    configure_windows_unwind(guest_np_cpp_web_api_offline_tests)
+    add_test(NAME guest_np_cpp_web_api_offline COMMAND guest_np_cpp_web_api_offline_tests)
+    if(WIN32)
+        set_tests_properties(guest_np_cpp_web_api_offline PROPERTIES ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:libSceNpCppWebApi>")
+    endif()
+
     add_test_executable(savedata_core_write_replacement_tests tests/SaveDataWriteReplacement.cpp)
     target_include_directories(savedata_core_write_replacement_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_link_libraries(savedata_core_write_replacement_tests PRIVATE libSceSaveData)

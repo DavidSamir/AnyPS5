@@ -1437,7 +1437,7 @@ State DecodeState(const QueueState& queue, bool vertexWorkgroup) {
     if (auto reason = sampleMaskRejection(queue, read(cx, 0x2f8), read(cx, 0x30e), read(cx, 0x30f)); !reason.empty()) throw std::runtime_error(reason);
     const auto viewportControl = read(cx, 0x206);
     if (viewportControl != 0x43fu) throw std::runtime_error(vteMessage(viewportControl));
-    zero(cx, 0x204, ClipControlMask, "unsupported PA_CL_CLIP_CNTL flags");
+    zero(cx, 0x204, ClipControlMask, "a PA_CL_CLIP_CNTL flag");
     result.depthClamp = (read(cx, 0x204) & 0x0c000000u) != 0;
     result.negativeOneToOne = (read(cx, 0x204) & 0x80000u) == 0;
     const auto raster = read(cx, 0x205);
@@ -2250,7 +2250,7 @@ std::string DrawRejection(const QueueState& queue, bool indexed) {
         if (auto reason = sampleMaskRejection(queue, config, word, other); !reason.empty()) return reason;
     }
     if (value(cx, 0x206, word) && word != 0x43fu) return vteMessage(word);
-    if (auto reason = nonzero(cx, 0x204, ClipControlMask, "unsupported PA_CL_CLIP_CNTL flags"); !reason.empty()) return reason;
+    if (auto reason = nonzero(cx, 0x204, ClipControlMask, "a PA_CL_CLIP_CNTL flag"); !reason.empty()) return reason;
     std::uint32_t targetMask = 0, shaderMask = 0;
     if (value(cx, 0x8e, targetMask) && value(cx, 0x8f, shaderMask) && value(cx, 0x202, word) && !colorControlSupported(word, ColorWriteMask(cx) != 0)) return colorControlMessage(word);
     if (auto reason = nonzero(cx, 0x1c4, zFormatSupported(zFormat) ? 0u : ~0u, "depth or sample-mask export"); !reason.empty()) return reason;

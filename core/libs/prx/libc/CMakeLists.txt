@@ -128,6 +128,21 @@ if(BUILD_TESTING)
         set_tests_properties(guest_floating_point PROPERTIES ENVIRONMENT_MODIFICATION
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
     endif()
+    if(MINGW OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        enable_language(ASM)
+        add_test_executable(guest_sce_v2_exceptions_tests
+            ${LIBS_INCLUDE_DIR}/tests/GuestSceV2Exceptions.cpp
+            ${LIBS_INCLUDE_DIR}/tests/GuestSceV2Exceptions.S)
+        target_include_directories(guest_sce_v2_exceptions_tests PRIVATE ${LIBS_INCLUDE_DIR})
+        target_link_libraries(guest_sce_v2_exceptions_tests PRIVATE libc)
+        configure_windows_unwind(guest_sce_v2_exceptions_tests)
+        add_test(NAME guest_sce_v2_exceptions COMMAND guest_sce_v2_exceptions_tests)
+        set_tests_properties(guest_sce_v2_exceptions PROPERTIES TIMEOUT 10)
+        if(WIN32)
+            set_tests_properties(guest_sce_v2_exceptions PROPERTIES ENVIRONMENT_MODIFICATION
+                "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
+        endif()
+    endif()
 endif()
 
 if(WIN32)
@@ -669,6 +684,16 @@ if(BUILD_TESTING)
     add_test(NAME guest_standard_streams_exclusive_stdout COMMAND guest_standard_stream_tests --exclusive-stdout)
     if(WIN32)
         set_tests_properties(guest_standard_streams guest_standard_streams_closed_stdout guest_standard_streams_exclusive_stdout PROPERTIES ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
+    endif()
+    add_test_executable(guest_gets_tests ${LIBS_INCLUDE_DIR}/tests/GuestGets.cpp)
+    target_include_directories(guest_gets_tests PRIVATE ${LIBS_INCLUDE_DIR})
+    target_link_libraries(guest_gets_tests PRIVATE libc ${CMAKE_DL_LIBS})
+    configure_windows_unwind(guest_gets_tests)
+    add_test(NAME guest_gets COMMAND guest_gets_tests $<TARGET_FILE:libc> guest_gets_error.tmp)
+    set_tests_properties(guest_gets PROPERTIES TIMEOUT 10)
+    if(WIN32)
+        set_tests_properties(guest_gets PROPERTIES ENVIRONMENT_MODIFICATION
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
     endif()
     add_test_executable(file_streams_tests ${LIBS_INCLUDE_DIR}/tests/FileStreams.cpp)
