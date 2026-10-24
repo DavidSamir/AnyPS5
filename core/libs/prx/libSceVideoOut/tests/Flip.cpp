@@ -479,10 +479,12 @@ void testControls() {
     check(owner->GetTriggeredEvents(&event, 1) == 1 && event.udata == &settings && sceVideoOutGetEventId(&event) == VIDEO_OUT_EVENT_VBLANK, "vblank event or updated user data missing");
     check(sceVideoOutAddPreVblankStartEvent(queue, handle, &mode) == 0, "pre-vblank subscription failed");
     check(sceVideoOutWaitVblank(handle) == 0, "vblank wait failed");
-    KernelEvent events[2]{};
-    check(owner->GetTriggeredEvents(events, 2) == 2, "pre-vblank or vblank event missing");
-    const auto& preVblank = sceVideoOutGetEventId(&events[0]) == VIDEO_OUT_EVENT_PRE_VBLANK_START ? events[0] : events[1];
-    check(sceVideoOutGetEventId(&preVblank) == VIDEO_OUT_EVENT_PRE_VBLANK_START && preVblank.udata == &mode, "pre-vblank event missing");
+    std::array<KernelEvent, 8> events{};
+    const int collected = owner->GetTriggeredEvents(events.data(), static_cast<int>(events.size()));
+    check(collected >= 2, "pre-vblank or vblank event missing");
+    const auto end = events.begin() + collected;
+    check(std::any_of(events.begin(), end, [&](KernelEvent& item) { return sceVideoOutGetEventId(&item) == VIDEO_OUT_EVENT_VBLANK && item.udata == &settings; }), "vblank event missing");
+    check(std::any_of(events.begin(), end, [&](KernelEvent& item) { return sceVideoOutGetEventId(&item) == VIDEO_OUT_EVENT_PRE_VBLANK_START && item.udata == &mode; }), "pre-vblank event missing");
     check(sceVideoOutDeletePreVblankStartEvent(queue, handle) == 0, "pre-vblank unsubscription failed");
     std::vector<std::byte> allocation(65536 + 65535);
     const auto storage = alignedBuffer(allocation);
@@ -1052,7 +1054,9 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "%s\n", error.what());
         try { LibcRunShutdown_nid_postfix(); }
         catch (const std::exception& shutdown) { std::fprintf(stderr, "shutdown: %s\n", shutdown.what()); }
-        if (std::string(error.what()).find("Vulkan support") != std::string::npos && !std::getenv("ANYPS5_REQUIRE_DISPLAY")) {
+        const std::string what = error.what();
+        const bool noVulkanWindow = what.find("Vulkan support") != std::string::npos || (what.starts_with("DisplayWindow: ") && what.find("Vulkan") != std::string::npos);
+        if (noVulkanWindow && !std::getenv("ANYPS5_REQUIRE_DISPLAY")) {
             std::printf("skipped, no display or Vulkan device: %s\n", error.what());
             return 77;
         }
