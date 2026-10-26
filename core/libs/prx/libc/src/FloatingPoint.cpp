@@ -1,3 +1,4 @@
+#include "prx/libc/include/Api.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <array>
 #include <cstdint>
@@ -52,7 +53,7 @@ int APS5_VABI fesetround_nid_postfix(int rounding) {
 int APS5_VABI fetestexcept_nid_postfix(int exceptions) {
     std::uint16_t status;
     asm volatile("fnstsw %0" : "=am"(status));
-    return (status | _mm_getcsr()) & static_cast<unsigned>(exceptions) & Exceptions;
+    return static_cast<int>((status | _mm_getcsr()) & static_cast<unsigned>(exceptions));
 }
 
 int APS5_VABI fegetexceptflag_nid_postfix(std::uint16_t* flags, int exceptions) {
@@ -60,8 +61,6 @@ int APS5_VABI fegetexceptflag_nid_postfix(std::uint16_t* flags, int exceptions) 
     *flags = static_cast<std::uint16_t>(fetestexcept_nid_postfix(exceptions));
     return 0;
 }
-
-int* APS5_VABI __error_nid_postfix();
 
 void APS5_VABI _Feraise_nid_postfix(int exceptions) {
     constexpr unsigned Invalid = 0x01, Ranges = 0x1c, Overflows = 0x18, Inexact = 0x20;
@@ -96,7 +95,6 @@ int APS5_VABI feclearexcept_nid_postfix(int exceptions) {
     return 0;
 }
 
-
 int APS5_VABI feenableexcept_nid_postfix(int exceptions) {
     return ChangeTraps(exceptions, true);
 }
@@ -117,6 +115,10 @@ int APS5_VABI fegettrapenable_nid_postfix() {
     std::uint16_t control;
     asm volatile("fnstcw %0" : "=m"(control));
     return ~control & Exceptions;
+}
+
+int APS5_VABI fegetexcept_nid_postfix() {
+    return fegettrapenable_nid_postfix();
 }
 
 int APS5_VABI fesettrapenable_nid_postfix(int exceptions) {

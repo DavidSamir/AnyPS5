@@ -95,7 +95,9 @@ private:
 #endif
 };
 
-int RunNativeClear(AgcDriver::VulkanDevice& device) {
+enum class ClearConsumer { Owner, Texture, Attachment };
+
+int RunNativeClear(AgcDriver::VulkanDevice& device, ClearConsumer consumer) {
     using namespace ShaderRecompiler;
     using namespace AgcDriver::Graphics;
     const std::lock_guard lock(Memory::GpuMutex());
@@ -161,6 +163,22 @@ int RunNativeClear(AgcDriver::VulkanDevice& device) {
     const auto generation = Memory::TrackerGeneration();
     userData[4] = 0xfffffff0u;
     device.Dispatch(compile(), groups, 1u, 1u, {}, reinterpret_cast<std::uintptr_t>(code.data()), nullptr, nullptr, htileClear);
+    std::puts("Native full BDA clear: checking sampled owner before explicit WaitIdle");
+    Require(context.recorder->PendingWriteOverlaps(target.htileAddress, metadataBytes), "the recognized HTILE clear is missing its pending write range");
+    switch (consumer) {
+        case ClearConsumer::Owner:
+            Require(DepthSurfaceHolds(context, DecodeTextureResource(words), sampled.get()), "a pending full BDA clear lost its native sampled owner");
+            break;
+        case ClearConsumer::Texture:
+            Require(CachedSampledTexture(context, words) == sampled, "a pending full BDA clear lost its native sampled view");
+            break;
+        case ClearConsumer::Attachment:
+            Require(DepthSurfaceView(context, target) == view, "a pending full BDA clear lost its native attachment");
+            break;
+    }
+    std::printf("Native full BDA clear: consumer=%u settled the recognized clear before WaitIdle\n", static_cast<unsigned>(consumer));
+    Require(!context.recorder->PendingWriteOverlaps(target.htileAddress, metadataBytes), "the native HTILE consumer did not settle its clear's pending write");
+    Require(Memory::StoredAllSince_nid_no_patch(target.htileAddress, metadataBytes, generation), "the native HTILE consumer did not complete its recognized clear");
     device.WaitIdle();
     for (std::size_t offset = 0; offset < BlockBytes; offset += 4u) {
         std::uint32_t value = 0;
@@ -168,6 +186,7 @@ int RunNativeClear(AgcDriver::VulkanDevice& device) {
         Require(value == (offset < metadataBytes ? 0xfffffff0u : 0u), "the native GPU clear did not write its exact metadata range");
     }
     std::printf("Native full BDA clear: exact %zu-byte metadata readback passed; complete=%d\n", metadataBytes, Memory::StoredAllSince_nid_no_patch(target.htileAddress, metadataBytes, generation));
+    Require(Memory::StoredAllSince_nid_no_patch(target.htileAddress, metadataBytes, generation), "the completed recognized native clear did not record exact coverage");
     Require(CachedSampledTexture(context, words) == sampled, "a completed full BDA clear lost its native sampled view");
     Require(DepthSurfaceView(context, target) == view, "a completed full BDA clear replaced its native attachment");
     device.WaitIdle();
@@ -182,7 +201,11 @@ int main() {
     try {
         const auto device = OpenVulkanTestDevice();
         if (!device) return VulkanTestSkipped;
-        return RunNativeClear(*device);
+        for (const auto consumer : {ClearConsumer::Owner, ClearConsumer::Texture, ClearConsumer::Attachment}) {
+            const auto result = RunNativeClear(*device, consumer);
+            if (result != 0) return result;
+        }
+        return 0;
     } catch (const std::exception& error) {
         std::fprintf(stderr, "%s\n", error.what());
         return 1;
