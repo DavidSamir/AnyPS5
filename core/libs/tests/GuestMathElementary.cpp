@@ -1,22 +1,9 @@
+#include "prx/libc/include/Api.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <limits>
-
-extern "C" {
-double APS5_VABI cbrt_nid_postfix(double);
-float APS5_VABI cbrtf_nid_postfix(float);
-double APS5_VABI acos_nid_postfix(double);
-double APS5_VABI atan_nid_postfix(double);
-float APS5_VABI atanf_nid_postfix(float);
-double APS5_VABI tan_nid_postfix(double);
-float APS5_VABI tanf_nid_postfix(float);
-double APS5_VABI log2_nid_postfix(double);
-float APS5_VABI log2f_nid_postfix(float);
-void APS5_VABI sincos_nid_postfix(double, double*, double*);
-void APS5_VABI sincosf_nid_postfix(float, float*, float*);
-}
 
 static void Require(bool value, int line) {
     if (!value) {
