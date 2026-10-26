@@ -146,6 +146,7 @@ constexpr int NET_SO_ERROR = 0x1007;
 constexpr int NET_SO_PROTOCOL = 0x1016;
 constexpr int NET_SO_NBIO = 0x1200;
 constexpr int NET_SO_REUSEADDR = 0x4;
+constexpr int NET_SO_KEEPALIVE = 0x8;
 constexpr int NET_SO_BROADCAST = 0x20;
 constexpr int NET_SO_ONESBCAST = 0x10000;
 constexpr int NET_SO_SNDBUF = 0x1001;
@@ -273,6 +274,7 @@ struct Sock {
     int snd_buffer = 0;
     int rcv_buffer = 0;
     int onesbcast = 0;
+    int keepalive = 0;
 };
 
 #ifdef _WIN32
@@ -1437,6 +1439,11 @@ int APS5_VABI sceNetSetsockopt(int s, int level, int optname, const void* optval
         const int native_option = optname == NET_SO_REUSEADDR ? SO_REUSEADDR : optname == NET_SO_BROADCAST ? SO_BROADCAST : optname == NET_SO_SNDBUF ? SO_SNDBUF : SO_RCVBUF;
         if (::setsockopt(socket.native->value, SOL_SOCKET, native_option, reinterpret_cast<const char*>(&value), sizeof(value)) != 0)
             return fail(native_error());
+    } else if (optname == NET_SO_KEEPALIVE) {
+        const int enabled = value != 0;
+        if (socket.type == NET_SOCK_STREAM &&
+            ::setsockopt(socket.native->value, SOL_SOCKET, SO_KEEPALIVE, reinterpret_cast<const char*>(&enabled), sizeof(enabled)) != 0)
+            return fail(native_error());
     } else if (optname == NET_SO_ONESBCAST) {
     } else {
         return fail(NET_EOPNOTSUPP);
@@ -1450,6 +1457,7 @@ int APS5_VABI sceNetSetsockopt(int s, int level, int optname, const void* optval
         if (optname == NET_SO_SNDBUF) it->second.snd_buffer = value;
         if (optname == NET_SO_RCVBUF) it->second.rcv_buffer = value;
         if (optname == NET_SO_ONESBCAST) it->second.onesbcast = value;
+        if (optname == NET_SO_KEEPALIVE) it->second.keepalive = value != 0 ? NET_SO_KEEPALIVE : 0;
     }
     return 0;
 }
@@ -1474,6 +1482,18 @@ int APS5_VABI sceNetGetsockopt(int s, int level, int optname, void* optval, uint
         const KernelTimeval timeout{microseconds / 1000000, microseconds % 1000000};
         *optlen = std::min(*optlen, static_cast<std::uint32_t>(sizeof(timeout)));
         std::memcpy(optval, &timeout, *optlen);
+        return 0;
+    }
+    if (level == NET_SOL_SOCKET && optname == NET_SO_KEEPALIVE) {
+        int enabled = socket.keepalive;
+        if (socket.type == NET_SOCK_STREAM) {
+            NativeLength size = sizeof(enabled);
+            if (::getsockopt(socket.native->value, SOL_SOCKET, SO_KEEPALIVE, reinterpret_cast<char*>(&enabled), &size) != 0)
+                return fail(native_error());
+        }
+        const int value = enabled != 0 ? NET_SO_KEEPALIVE : 0;
+        *optlen = std::min(*optlen, static_cast<std::uint32_t>(sizeof(value)));
+        std::memcpy(optval, &value, *optlen);
         return 0;
     }
     if (level == NET_IPPROTO_TCP && socket.type != NET_SOCK_STREAM) return fail(NET_EINVAL);
@@ -1767,8 +1787,7 @@ int APS5_VABI sceNetGetSockInfo6(std::int32_t s, NetSockInfo6* info, std::uint32
 }
 
 int APS5_VABI sceNetEpollCreate(const char* name, int flags) {
-    (void)name;
-    (void)flags;
+    if (!name || flags != 0) return fail(NET_EINVAL);
     std::lock_guard lk(g_mutex);
     const int id = g_next_epoll++;
     g_epolls.insert(id);
@@ -2054,8 +2073,7 @@ int APS5_VABI sceNetEtherStrton(const char* text, NetEtherAddr* address) {
 }
 
 int APS5_VABI sceNetGetMacAddress(NetEtherAddr* addr, int flags) {
-    (void)flags;
-    if (addr == nullptr) {
+    if (addr == nullptr || flags != 0) {
         return fail(NET_EINVAL);
     }
     // Keep guest identity stable without exposing the host adapter address.
@@ -2068,7 +2086,7 @@ int APS5_VABI sceNetGetMacAddress(NetEtherAddr* addr, int flags) {
 int APS5_VABI sceNetResolverCreate(const char* name, int memid, int flags) {
     (void)name;
     (void)memid;
-    (void)flags;
+    if (flags != 0) return fail(NET_EINVAL);
     std::lock_guard lk(g_mutex);
     const int id = g_next_resolver++;
     g_resolvers[id] = {};
@@ -2128,9 +2146,7 @@ int lookup_ipv4(int rid, const char* hostname, const char* func, std::vector<std
 }
 
 int APS5_VABI sceNetResolverStartNtoa(int rid, const char* hostname, void* addr, int timeout, int retry, int flags) {
-    (void)timeout;
-    (void)retry;
-    (void)flags;
+    if (timeout < 0 || retry < 0 || (static_cast<unsigned>(flags) & 0xfffefffeu) != 0) return fail(NET_EINVAL);
     if (!hostname || !addr) return fail(NET_EINVAL);
     std::vector<std::uint32_t> addresses;
     if (const int error = lookup_ipv4(rid, hostname, __func__, addresses)) return error;

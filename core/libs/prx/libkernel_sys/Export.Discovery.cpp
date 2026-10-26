@@ -69,11 +69,6 @@ int APS5_VABI futimesat_nid_postfix(void) {
     return 0;
 }
 
-int APS5_VABI get_authinfo_nid_postfix(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI get_module_info_list_nid_postfix(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
@@ -974,11 +969,6 @@ int APS5_VABI sceKernelGetMemoryPstate(void) {
     return 0;
 }
 
-int APS5_VABI sceKernelGetOpenPsIdForSystem(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI sceKernelGetPagingStatsOfAllObjects(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
@@ -1400,17 +1390,7 @@ int APS5_VABI sceKernelIsAuthenticNeo(void) {
     return 1;
 }
 
-int APS5_VABI sceKernelIsCEX(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI sceKernelIsDebuggerAttached(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceKernelIsDevKit(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2166,10 +2146,6 @@ int APS5_VABI scePthreadGetcpuclockid(Pthread thread, int* clockId) {
     return SceResult(pthread_getcpuclockid_nid_postfix(thread, clockId));
 }
 
-int APS5_VABI scePthreadMain(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
 
 int APS5_VABI scePthreadMulti(void) {
     const int error = pthread_multi_np_nid_postfix();
@@ -2290,11 +2266,6 @@ int APS5_VABI set_phys_fmem_limit_nid_postfix(void) {
 }
 
 int APS5_VABI setlogin_nid_postfix(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI settimeofday_nid_postfix(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }

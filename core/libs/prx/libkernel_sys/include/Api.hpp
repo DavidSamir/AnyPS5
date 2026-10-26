@@ -24,6 +24,14 @@ struct KernelTitleWorkaround {
     std::uint64_t ids[2];
 };
 
+struct KernelAuthInfo {
+    std::uint64_t programAuthorityId;
+    std::uint64_t capabilities[4];
+    std::uint64_t attributes[4];
+    std::uint64_t credentials[8];
+};
+static_assert(sizeof(KernelAuthInfo) == 0x88);
+
 extern "C" {
 
 int APS5_VABI aio_read_nid_postfix(GuestAiocb* aiocb);
@@ -62,6 +70,7 @@ int APS5_VABI chown_nid_postfix(const char* path, std::uint32_t uid, std::uint32
 int APS5_VABI lchown_nid_postfix(const char* path, std::uint32_t uid, std::uint32_t gid);
 int APS5_VABI fchownat_nid_postfix(int fd, const char* path, std::uint32_t uid, std::uint32_t gid, int flag);
 int APS5_VABI fstatat_nid_postfix(int fd, const char* path, FileStat* sb, int flag);
+int APS5_VABI settimeofday_nid_postfix(const KernelTimeval* tv, const KernelTimezone* tz);
 int APS5_VABI unlinkat_nid_postfix(int fd, const char* path, int flag);
 int APS5_VABI scePthreadCondattrGetclock(const PthreadCondattr* attr, KernelClockid* clockId);
 int APS5_VABI renameat_nid_postfix(int oldfd, const char* from, int newfd, const char* to);
@@ -80,7 +89,7 @@ int APS5_VABI cpuset_getid_nid_postfix(void);
 int APS5_VABI cpuset_setid_nid_postfix(void);
 int APS5_VABI dynlib_get_obj_member_nid_postfix(void);
 int APS5_VABI futimesat_nid_postfix(void);
-int APS5_VABI get_authinfo_nid_postfix(void);
+int APS5_VABI get_authinfo_nid_postfix(int pid, KernelAuthInfo* info);
 int APS5_VABI get_module_info_list_nid_postfix(void);
 int APS5_VABI get_page_table_stats_nid_postfix(void);
 int APS5_VABI get_sdk_compiled_version_nid_postfix(void);
@@ -264,7 +273,7 @@ int APS5_VABI sceKernelGetIpcPath(void);
 int APS5_VABI sceKernelGetKnobs(void);
 int APS5_VABI sceKernelGetKqueueFromEqueue(void);
 int APS5_VABI sceKernelGetMemoryPstate(void);
-int APS5_VABI sceKernelGetOpenPsIdForSystem(void);
+int APS5_VABI sceKernelGetOpenPsIdForSystem(void* id);
 int APS5_VABI sceKernelGetPagingStatsOfAllObjects(void);
 int APS5_VABI sceKernelGetPagingStatsOfAllThreads(void);
 int APS5_VABI sceKernelGetParentApp(void);
@@ -533,7 +542,6 @@ int APS5_VABI sched_setscheduler_nid_postfix(void);
 int APS5_VABI sem_setname_nid_postfix(void);
 int APS5_VABI set_phys_fmem_limit_nid_postfix(void);
 int APS5_VABI setlogin_nid_postfix(void);
-int APS5_VABI settimeofday_nid_postfix(void);
 int APS5_VABI sigqueue_nid_postfix(void);
 int APS5_VABI sigreturn_nid_postfix(void);
 int APS5_VABI statfs_nid_postfix(void);
