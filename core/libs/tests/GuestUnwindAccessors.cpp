@@ -3,19 +3,6 @@
 #include <cstdio>
 #include <cstdlib>
 
-extern "C" {
-_Unwind_Word APS5_VABI _Unwind_GetGR_nid_postfix(_Unwind_Context*, int);
-void APS5_VABI _Unwind_SetGR_nid_postfix(_Unwind_Context*, int, _Unwind_Word);
-_Unwind_Ptr APS5_VABI _Unwind_GetIP_nid_postfix(_Unwind_Context*);
-void APS5_VABI _Unwind_SetIP_nid_postfix(_Unwind_Context*, _Unwind_Ptr);
-_Unwind_Ptr APS5_VABI _Unwind_GetIPInfo_nid_postfix(_Unwind_Context*, int*);
-_Unwind_Word APS5_VABI _Unwind_GetCFA_nid_postfix(_Unwind_Context*);
-_Unwind_Ptr APS5_VABI _Unwind_GetLanguageSpecificData_nid_postfix(_Unwind_Context*);
-_Unwind_Ptr APS5_VABI _Unwind_GetRegionStart_nid_postfix(_Unwind_Context*);
-_Unwind_Ptr APS5_VABI _Unwind_GetDataRelBase_nid_postfix(_Unwind_Context*);
-_Unwind_Ptr APS5_VABI _Unwind_GetTextRelBase_nid_postfix(_Unwind_Context*);
-}
-
 static void Require(bool value, int line) {
     if (!value) {
         std::fprintf(stderr, "unwind accessor check failed at line %d\n", line);
